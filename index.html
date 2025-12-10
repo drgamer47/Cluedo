@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clue/Cluedo Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+                <div style="flex: 1;">
+                    <h1>🕵️ Clue/Cluedo Assistant</h1>
+                    <p class="subtitle">Track cards, make deductions, and get suggestions</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button id="wideViewToggle" class="header-btn">↔️ Wide View</button>
+                    <button id="settingsBtn" style="background: var(--primary-color, #667eea); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 18px; margin-left: 0;">⚙️ Settings</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; flex-direction: column;">
+            <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: var(--primary-color, #667eea);">Settings</h2>
+                    <button id="closeSettings" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">&times;</button>
+                </div>
+                
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: bold; color: #333;">Theme Color:</label>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <input type="color" id="themeColorPicker" value="#667eea" style="width: 80px; height: 50px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer;">
+                        <input type="text" id="themeColorText" value="#667eea" style="flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 14px;">
+                    </div>
+                    <p style="margin-top: 8px; color: #666; font-size: 0.9em;">Choose a color to customize the theme</p>
+                </div>
+                
+                <div style="margin-bottom: 25px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <label style="display: block; margin-bottom: 15px; font-weight: bold; color: #333;">Utility Button Colors:</label>
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; color: #333;">💾 Save Game:</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="color" id="saveGameColor" value="#667eea" style="width: 60px; height: 40px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer;">
+                                <input type="text" id="saveGameColorText" value="#667eea" style="flex: 1; padding: 8px; border: 2px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; color: #333;">📂 Load Game:</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="color" id="loadGameColor" value="#667eea" style="width: 60px; height: 40px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer;">
+                                <input type="text" id="loadGameColorText" value="#667eea" style="flex: 1; padding: 8px; border: 2px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; color: #333;">↶ Undo Last Move:</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="color" id="undoMoveColor" value="#ffc107" style="width: 60px; height: 40px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer;">
+                                <input type="text" id="undoMoveColorText" value="#ffc107" style="flex: 1; padding: 8px; border: 2px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 5px; color: #333;">🔄 Reset Game:</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="color" id="resetGameColor" value="#dc3545" style="width: 60px; height: 40px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer;">
+                                <input type="text" id="resetGameColorText" value="#dc3545" style="flex: 1; padding: 8px; border: 2px solid #ddd; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                            </div>
+                        </div>
+                    </div>
+                    <p style="margin-top: 8px; color: #666; font-size: 0.9em;">Customize colors for each utility button</p>
+                </div>
+                
+                <div style="margin-bottom: 25px; padding-top: 20px; border-top: 1px solid #ddd;">
+                    <label style="display: block; margin-bottom: 15px; font-weight: bold; color: #333;">Card Status Layout:</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; border-radius: 5px; transition: background 0.2s;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='transparent'">
+                            <input type="radio" name="cardStatusLayout" value="grid" id="layoutGrid" checked style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="flex: 1;">Grid Layout (Default)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; border-radius: 5px; transition: background 0.2s;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='transparent'">
+                            <input type="radio" name="cardStatusLayout" value="list" id="layoutList" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="flex: 1;">List View (Better for small screens)</span>
+                        </label>
+                    </div>
+                    <p style="margin-top: 8px; color: #666; font-size: 0.9em;">Choose how the card status table is displayed</p>
+                </div>
+                
+                <div id="playerColorsSection" style="margin-bottom: 25px; padding-top: 20px; border-top: 1px solid #ddd; display: none;">
+                    <label style="display: block; margin-bottom: 15px; font-weight: bold; color: #333;">Player Colors:</label>
+                    <div id="playerColorsList" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Player colors will be dynamically added here -->
+                    </div>
+                    <p style="margin-top: 8px; color: #666; font-size: 0.9em;">Customize colors for each player and their status indicators</p>
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button id="resetColor" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Reset to Default</button>
+                    <button id="saveSettings" style="padding: 10px 20px; background: var(--primary-color, #667eea); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="game-setup">
+            <h2>Game Setup</h2>
+            <div class="setup-controls">
+                <label for="numPlayers">Number of Players (including you):</label>
+                <input type="number" id="numPlayers" min="2" max="6" value="3">
+                <button id="setupGame">Setup Game</button>
+            </div>
+            <div id="playerNames" class="player-names"></div>
+        </div>
+
+        <div class="main-content" id="mainContent" style="display: none;">
+            <div class="left-panel">
+                <div class="card-section">
+                    <h2>Your Cards</h2>
+                    <div id="myCards" class="card-list"></div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Suggestions</h2>
+                    <div class="suggestion-controls">
+                        <select id="sugPlayer">
+                            <option value="">Select Player</option>
+                        </select>
+                        <select id="sugCharacter">
+                            <option value="">Character</option>
+                        </select>
+                        <select id="sugRoom">
+                            <option value="">Room</option>
+                        </select>
+                        <select id="sugWeapon">
+                            <option value="">Weapon</option>
+                        </select>
+                        <div class="shown-controls">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="shownToMe">
+                                <span>Shown to me</span>
+                            </label>
+                            <select id="sugShownBy">
+                                <option value="">Shown by (who showed the card?)</option>
+                            </select>
+                        </div>
+                        <select id="sugCardShown" style="display: none;">
+                            <option value="">Which card was shown?</option>
+                        </select>
+                        <button id="addSuggestion">Add Suggestion</button>
+                        <p class="help-text">If someone shows a card to you, check "Shown to me" and select which card. If shown to someone else, select them in "Shown by.</p>
+                    </div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Move History</h2>
+                    <div id="movesHistory" class="moves-history"></div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="card-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h2 style="margin: 0;">Card Status</h2>
+                        <button id="resetTableBtn" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 Reset Table</button>
+                    </div>
+                    <div id="cardStatus" class="card-status"></div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Card Count Tracker</h2>
+                    <div id="cardCounts" class="card-counts"></div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Probability Calculator</h2>
+                    <div id="probabilities" class="probabilities"></div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Deductions</h2>
+                    <div id="deductions" class="deductions"></div>
+                </div>
+
+                <div class="card-section">
+                    <h2>Assistant Suggestions</h2>
+                    <div id="assistantSuggestions" class="assistant-suggestions"></div>
+                    <button id="getSuggestions">Get Best Suggestions</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
