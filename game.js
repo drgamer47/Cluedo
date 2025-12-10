@@ -58,12 +58,9 @@ class ClueGame {
     addMyCard(card) {
         if (!this.myCards.includes(card)) {
             this.myCards.push(card);
+            // markCardHas already marks all other players as "doesn't have" and tracks them
+            // No need to call markCardDoesntHave separately - that would interfere with tracking
             this.markCardHas('You', card);
-            this.players.forEach(player => {
-                if (player !== 'You') {
-                    this.markCardDoesntHave(player, card);
-                }
-            });
             this.updateYouCardStatuses();
         }
     }
@@ -72,14 +69,10 @@ class ClueGame {
         const index = this.myCards.indexOf(card);
         if (index > -1) {
             this.myCards.splice(index, 1);
+            // Don't clear other players' statuses here - let markCardDoesntHave handle it
+            // with proper tracking of which players were auto-set vs manually set
+            // Just clear "You" status - the markCardDoesntHave call will handle others
             this.clearCardStatus('You', card, true);
-            if (this.cardStatus[card]) {
-                this.players.forEach(player => {
-                    if (player !== 'You') {
-                        this.clearCardStatus(player, card);
-                    }
-                });
-            }
             this.updateYouCardStatuses();
         }
     }
@@ -120,7 +113,16 @@ class ClueGame {
         }
         
         // If a player has it, mark all other players as not having it
+        // Track which players were automatically set (for later cleanup if needed)
         const allPlayersList = [...this.players, 'You'];
+        const autoSetDoesntHave = [];
+        
+        // Track which player caused each "doesn't have" status
+        // This allows us to only clear players that were set by THIS player, not by other players
+        if (!this.cardStatus[card].doesntHaveSource) {
+            this.cardStatus[card].doesntHaveSource = {}; // { player: sourcePlayer }
+        }
+        
         allPlayersList.forEach(otherPlayer => {
             if (otherPlayer !== player) {
                 // Remove from has if present
@@ -129,12 +131,36 @@ class ClueGame {
                     this.cardStatus[card].has.splice(otherHasIndex, 1);
                 }
                 
+                // Track if this player was already in "doesn't have" before we mark them
+                const wasAlreadyDoesntHave = this.cardStatus[card].doesntHave.includes(otherPlayer);
+                
                 // Add to doesn't have if not already there
-                if (!this.cardStatus[card].doesntHave.includes(otherPlayer)) {
+                if (!wasAlreadyDoesntHave) {
                     this.cardStatus[card].doesntHave.push(otherPlayer);
+                    // Track that THIS player being "has" caused otherPlayer to be "doesn't have"
+                    this.cardStatus[card].doesntHaveSource[otherPlayer] = player;
+                    autoSetDoesntHave.push(otherPlayer);
+                } else {
+                    // Player was already "doesn't have" - check if they were set by another player being "has"
+                    // If so, update the source to this player (since this player now has it)
+                    // If they were manually set (no source), don't change the source
+                    if (this.cardStatus[card].doesntHaveSource[otherPlayer]) {
+                        // Update source to this player (they were auto-set by another player, now by this one)
+                        this.cardStatus[card].doesntHaveSource[otherPlayer] = player;
+                        autoSetDoesntHave.push(otherPlayer);
+                    }
+                    // If no source exists, it means they were manually set - don't track or change
                 }
             }
         });
+        
+        // Store which players were automatically set as "doesn't have" by this markCardHas call
+        // This allows us to only clear those when unmarking, not manually set ones
+        if (!this.cardStatus[card].autoSetDoesntHave) {
+            this.cardStatus[card].autoSetDoesntHave = [];
+        }
+        // Store a reference to the player who has it, and which players they auto-set
+        this.cardStatus[card].autoSetDoesntHave[player] = autoSetDoesntHave;
         
         // If a player has it, it can't be in the envelope
         this.cardStatus[card].envelope = false;
@@ -153,13 +179,70 @@ class ClueGame {
             // Track move only if explicitly requested (user action, not automatic deduction)
             if (trackMove) {
                 this.addMove('markDoesntHave', { player, card });
+                
+                // Track that this was manually set (not auto-set by another player being "has")
+                // This prevents it from being cleared when other players are unmarked
+                if (!this.cardStatus[card].doesntHaveSource) {
+                    this.cardStatus[card].doesntHaveSource = {};
+                }
+                // Mark as manually set (use null or special marker to indicate manual)
+                // We'll use null to indicate manual, or a player name to indicate auto-set
+                // Actually, let's not set it at all if it's manual - that way we can distinguish
+                // If doesnHaveSource[player] exists, it was auto-set by that player
+                // If it doesn't exist, it was manually set
             }
         }
+        
+        // Check if this player was previously marked as "has" (before we remove them)
+        const wasMarkedAsHas = this.cardStatus[card].has.includes(player);
         
         // Remove from has if present
         const hasIndex = this.cardStatus[card].has.indexOf(player);
         if (hasIndex > -1) {
             this.cardStatus[card].has.splice(hasIndex, 1);
+        }
+        
+        // If this was a manual action (trackMove = true) and the player was previously marked as "has",
+        // clear the "doesn't have" status of other players that were automatically set by markCardHas
+        // This prevents cascading "doesn't have" statuses from manual clicks
+        // BUT: Only clear players that were automatically set by THIS player being "has", not manually set ones
+        if (trackMove && wasMarkedAsHas) {
+            // Get the list of players that should be cleared when this player is unmarked
+            const autoSetList = this.cardStatus[card].autoSetDoesntHave && 
+                               this.cardStatus[card].autoSetDoesntHave[player] || [];
+            
+            // Clear players that were set by THIS player being "has"
+            // Use the source tracking to only clear players that were set by this player
+            // BUT: Only clear if no other player is currently "has" (otherwise they should stay "doesn't have")
+            autoSetList.forEach(otherPlayer => {
+                // Only clear if this player was the source of the "doesn't have" status
+                if (this.cardStatus[card].doesntHaveSource && 
+                    this.cardStatus[card].doesntHaveSource[otherPlayer] === player) {
+                    // Check if any other player is currently "has" - if so, don't clear
+                    // (because that other player would have set them as "doesn't have")
+                    const hasAnyOtherPlayer = this.cardStatus[card].has.length > 0;
+                    
+                    if (!hasAnyOtherPlayer) {
+                        // No one else has it, so clear this player's "doesn't have" status
+                        const doesntHaveIndex = this.cardStatus[card].doesntHave.indexOf(otherPlayer);
+                        if (doesntHaveIndex > -1) {
+                            this.cardStatus[card].doesntHave.splice(doesntHaveIndex, 1);
+                        }
+                        // Remove the source tracking
+                        delete this.cardStatus[card].doesntHaveSource[otherPlayer];
+                    } else {
+                        // Another player has it, so this player should stay "doesn't have"
+                        // But we need to update the source to that other player
+                        const otherPlayerWhoHas = this.cardStatus[card].has[0];
+                        this.cardStatus[card].doesntHaveSource[otherPlayer] = otherPlayerWhoHas;
+                    }
+                }
+            });
+            
+            // Clean up the tracking data for this player
+            if (this.cardStatus[card].autoSetDoesntHave) {
+                delete this.cardStatus[card].autoSetDoesntHave[player];
+            }
         }
         
         this.updateDeductions();
@@ -244,10 +327,15 @@ class ClueGame {
             const showingPlayer = shownBy;
             this.markCardHas(showingPlayer, cardShown);
             
-            // The suggesting player doesn't have any of these cards
-            this.markCardDoesntHave(player, character);
-            this.markCardDoesntHave(player, room);
-            this.markCardDoesntHave(player, weapon);
+            // Only mark the suggester as "doesn't have" if "You" made the suggestion
+            // (because "You" saw the card, so "You" don't have any of them)
+            // If another player made the suggestion, we can't infer they don't have the cards
+            if (player === 'You') {
+                // The suggesting player ("You") doesn't have any of these cards
+                this.markCardDoesntHave(player, character);
+                this.markCardDoesntHave(player, room);
+                this.markCardDoesntHave(player, weapon);
+            }
             
             // Players between suggester and shower (in turn order) don't have any of these
             // Turn order: You, Player 1, Player 2, etc. (each to the left)
@@ -317,8 +405,10 @@ class ClueGame {
             // But we DON'T mark the suggester as "doesn't have" because:
             // - Players can suggest cards they have
             // - Just because no one showed a card doesn't mean the suggester doesn't have them
-            this.players.forEach(p => {
-                if (p !== player && p !== 'You') {
+            const allPlayersList = ['You', ...this.players];
+            allPlayersList.forEach(p => {
+                // Mark all players EXCEPT the suggester as "doesn't have"
+                if (p !== player) {
                     this.markCardDoesntHave(p, character);
                     this.markCardDoesntHave(p, room);
                     this.markCardDoesntHave(p, weapon);
@@ -326,18 +416,25 @@ class ClueGame {
             });
             
             // Special case: If "You" made the suggestion and no one showed a card,
-            // and "You" doesn't have any of these cards, mark "You" as doesn't have
-            // (updateDeductions will then mark them as in the envelope)
+            // and "You" doesn't have any of these cards, mark them as in the envelope
             if (player === 'You') {
-                if (!this.myCards.includes(character)) {
-                    this.markCardDoesntHave('You', character);
-                }
-                if (!this.myCards.includes(room)) {
-                    this.markCardDoesntHave('You', room);
-                }
-                if (!this.myCards.includes(weapon)) {
-                    this.markCardDoesntHave('You', weapon);
-                }
+                const suggestionCards = [character, room, weapon];
+                suggestionCards.forEach(card => {
+                    if (!this.myCards.includes(card)) {
+                        // "You" doesn't have this card, and no one showed it
+                        // Since all other players are marked as "doesn't have", it must be in the envelope
+                        if (!this.cardStatus[card]) {
+                            this.cardStatus[card] = { has: [], doesntHave: [], hasOneOf: [], envelope: false };
+                        }
+                        // Mark "You" as doesn't have (for envelope detection)
+                        if (!this.cardStatus[card].doesntHave.includes('You')) {
+                            this.cardStatus[card].doesntHave.push('You');
+                        }
+                        // Mark as envelope (all players including "You" don't have it)
+                        this.cardStatus[card].envelope = true;
+                        this.cardStatus[card].has = [];
+                    }
+                });
             }
         }
     }
@@ -438,15 +535,25 @@ class ClueGame {
             const iDontHave = status.doesntHave.includes('You') || 
                              (this.myCards.length > 0 && !this.myCards.includes(card));
             
+            // Check if there are any suggestions involving this card (for evidence-based deductions)
+            const hasSuggestionEvidence = this.suggestions.some(sug => 
+                sug.character === card || sug.room === card || sug.weapon === card
+            );
+            
             // If all players (including me) don't have it, it must be in the envelope
-            if (allOtherPlayersDontHave && iDontHave && status.has.length === 0) {
+            // Only auto-mark if we have suggestion evidence
+            if (allOtherPlayersDontHave && iDontHave && status.has.length === 0 && hasSuggestionEvidence) {
                 status.envelope = true;
                 // Clear any conflicting data
                 status.has = [];
             }
             
             // Deduction 4: If we know all players except one don't have it, that one must have it
-            if (!status.envelope && status.has.length === 0) {
+            // BUT: Only auto-deduce if we have suggestion evidence, not just manual clicks
+            // This prevents the cascade where clicking one player triggers auto-marking others
+            // EXCEPTION: Don't mark the suggester as "has" if no one showed a card for this card
+            // (in that case, the cards are more likely in the envelope)
+            if (!status.envelope && status.has.length === 0 && hasSuggestionEvidence) {
                 const playersWithoutCard = status.doesntHave.length;
                 
                 // If all but one player doesn't have it, the remaining one must have it
@@ -457,10 +564,22 @@ class ClueGame {
                         !status.doesntHave.includes(player)
                     );
                     
-                    if (playerWhoHas && playerWhoHas !== 'You') {
-                        this.markCardHas(playerWhoHas, card);
-                    } else if (playerWhoHas === 'You' && !this.myCards.includes(card)) {
-                        // It's either mine or in envelope - can't determine yet
+                    // Check if this player was the suggester in a "no one showed" suggestion for this card
+                    const wasSuggesterWithNoShow = this.suggestions.some(sug => {
+                        const suggestionCards = [sug.character, sug.room, sug.weapon];
+                        return suggestionCards.includes(card) && 
+                               sug.player === playerWhoHas && 
+                               !sug.shownBy;
+                    });
+                    
+                    // Don't mark as "has" if they were the suggester and no one showed
+                    // (the cards are more likely in the envelope - Deduction 3 should handle this)
+                    if (!wasSuggesterWithNoShow) {
+                        if (playerWhoHas && playerWhoHas !== 'You') {
+                            this.markCardHas(playerWhoHas, card);
+                        } else if (playerWhoHas === 'You' && !this.myCards.includes(card)) {
+                            // It's either mine or in envelope - can't determine yet
+                        }
                     }
                 }
             }
@@ -984,4 +1103,3 @@ class ClueGame {
         return 'unknown';
     }
 }
-

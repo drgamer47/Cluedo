@@ -4,15 +4,56 @@ const game = new ClueGame();
 let isGameSetup = false;
 let youDisplayName = 'You'; // Store the custom name for "You"
 
-// Setup game
+// Setup game - Add input validation to automatically correct invalid values
+const numPlayersInput = document.getElementById('numPlayers');
+
+// Validate and correct on input (as user types)
+numPlayersInput.addEventListener('input', (e) => {
+    let value = parseInt(e.target.value);
+    // Allow empty input while typing
+    if (isNaN(value)) {
+        return;
+    }
+    // Auto-correct to valid range
+    if (value < 2) {
+        e.target.value = 2;
+    } else if (value > 6) {
+        e.target.value = 6;
+    }
+});
+
+// Validate on blur (when user leaves the field) - handles edge cases
+numPlayersInput.addEventListener('blur', (e) => {
+    let value = parseInt(e.target.value);
+    if (isNaN(value) || value < 2) {
+        e.target.value = 2;
+    } else if (value > 6) {
+        e.target.value = 6;
+    }
+});
+
 document.getElementById('setupGame').addEventListener('click', () => {
-    const numPlayers = parseInt(document.getElementById('numPlayers').value);
+    console.log('[setupGame] Button clicked');
+    const numPlayersInput = document.getElementById('numPlayers');
+    const numPlayers = parseInt(numPlayersInput.value);
+    console.log('[setupGame] Number of players:', numPlayers);
     
     // Validate minimum players
     if (numPlayers < 2) {
+        console.warn('[setupGame] Invalid number of players (too few):', numPlayers);
         alert('You need at least 2 players (including yourself).');
+        numPlayersInput.value = 2;
         return;
     }
+    
+    // Validate maximum players
+    if (numPlayers > 6) {
+        console.warn('[setupGame] Invalid number of players (too many):', numPlayers);
+        alert('Maximum 6 players allowed (including yourself).');
+        numPlayersInput.value = 6;
+        return;
+    }
+    
     
     const playerNamesDiv = document.getElementById('playerNames');
     playerNamesDiv.innerHTML = '';
@@ -40,11 +81,13 @@ document.getElementById('setupGame').addEventListener('click', () => {
     const confirmBtn = document.createElement('button');
     confirmBtn.textContent = 'Confirm Players';
     confirmBtn.style.marginTop = '10px';
-    confirmBtn.addEventListener('click', () => {
+        confirmBtn.addEventListener('click', () => {
+        console.log('[confirmPlayers] Button clicked');
         const names = [];
         // Store the custom display name for "You"
         const youNameInput = document.getElementById('playerYou');
         youDisplayName = youNameInput.value.trim() || 'You';
+        console.log('[confirmPlayers] Your display name:', youDisplayName);
         // Always use the internal identifier "You" for the first slot to avoid
         // creating an extra player when the user renames themselves.
         names.push('You');
@@ -53,10 +96,12 @@ document.getElementById('setupGame').addEventListener('click', () => {
             const name = document.getElementById(`player${i}`).value || `Player ${i + 1}`;
             names.push(name);
         }
+        console.log('[confirmPlayers] Player names:', names);
         
             // Pass total number of players (which includes "You")
         game.setupGame(numPlayers, names);
         isGameSetup = true;
+        console.log('[confirmPlayers] Game setup complete, isGameSetup:', isGameSetup);
         document.getElementById('mainContent').style.display = 'grid';
         updateUI();
     });
@@ -239,6 +284,7 @@ document.getElementById('sugPlayer').addEventListener('change', () => {
 
 // Add suggestion
 document.getElementById('addSuggestion').addEventListener('click', () => {
+    console.log('[addSuggestion] Button clicked');
     const player = document.getElementById('sugPlayer').value;
     const character = document.getElementById('sugCharacter').value;
     const room = document.getElementById('sugRoom').value;
@@ -246,6 +292,7 @@ document.getElementById('addSuggestion').addEventListener('click', () => {
     const shownToMe = document.getElementById('shownToMe').checked;
     const cardShown = document.getElementById('sugCardShown').value;
     const shownBy = document.getElementById('sugShownBy').value;
+    console.log('[addSuggestion] Data:', { player, character, room, weapon, shownToMe, cardShown, shownBy });
     
     if (!player || !character || !room || !weapon) {
         alert('Please fill in all suggestion fields');
@@ -274,7 +321,8 @@ document.getElementById('addSuggestion').addEventListener('click', () => {
         return;
     }
     
-    game.addSuggestion(player, character, room, weapon, shownBy || null, shownToMe, cardShown || null);
+    const suggestion = game.addSuggestion(player, character, room, weapon, shownBy || null, shownToMe, cardShown || null);
+    console.log('[addSuggestion] Suggestion added:', suggestion);
     
     // Clear suggestion form
     document.getElementById('sugPlayer').value = '';
@@ -286,6 +334,7 @@ document.getElementById('addSuggestion').addEventListener('click', () => {
     document.getElementById('sugCardShown').value = '';
     document.getElementById('sugCardShown').style.display = 'none';
     
+    console.log('[addSuggestion] Form cleared, calling updateUI');
     updateUI();
 });
 
@@ -315,7 +364,8 @@ document.getElementById('getSuggestions').addEventListener('click', () => {
         
         // Add click handler to populate form
         suggestionDiv.addEventListener('click', () => {
-            document.getElementById('sugPlayer').value = sug.player;
+            // Always set player to "You" since these are suggestions for you to make
+            document.getElementById('sugPlayer').value = 'You';
             document.getElementById('sugCharacter').value = sug.character;
             document.getElementById('sugRoom').value = sug.room;
             document.getElementById('sugWeapon').value = sug.weapon;
@@ -337,10 +387,109 @@ document.getElementById('getSuggestions').addEventListener('click', () => {
     container.appendChild(countDiv);
 });
 
-// Helper function to get card status layout preference
-function getCardStatusLayout() {
-    const saved = localStorage.getItem('cardStatusLayout');
-    return saved || 'grid'; // Default to grid
+function updateUI() {
+    console.log('[updateUI] Called, isGameSetup:', isGameSetup);
+    if (!isGameSetup) {
+        console.log('[updateUI] Game not set up, returning early');
+        return;
+    }
+
+    // Update "Your Cards" section
+    const myCardsDiv = document.getElementById('myCards');
+    const allCards = [...game.characters, ...game.rooms, ...game.weapons];
+    console.log('[updateUI] Total cards:', allCards.length, 'My cards:', game.myCards);
+
+    myCardsDiv.innerHTML = '';
+    allCards.forEach(card => {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'card';
+        cardDiv.textContent = card;
+
+        // Check card status to determine if "You" has the card
+        // This reflects when other players have cards (which means "You" don't have them)
+        const cardStatus = game.getCardStatus(card);
+        const youHasCard = cardStatus.has.includes('You');
+        const youDoesntHaveCard = cardStatus.doesntHave.includes('You');
+        
+        // If any other player has the card, "You" definitely doesn't have it
+        // (The game logic should mark "You" as doesn't have, but check this as a fallback)
+        const otherPlayerHasCard = cardStatus.has.length > 0 && 
+                                   cardStatus.has.some(player => player !== 'You');
+        
+        // Find which player has the card (if any)
+        const playerWhoHasCard = cardStatus.has.find(player => player !== 'You');
+        
+        // If card status explicitly says "You" has it, show as has
+        // If card status says "You" doesn't have it OR another player has it, show as doesn't-have
+        // Otherwise, fall back to game.myCards
+        let hasCard;
+        if (youHasCard) {
+            hasCard = true;
+            console.log('[updateUI] Card', card, '- You have it');
+        } else if (youDoesntHaveCard || otherPlayerHasCard) {
+            hasCard = false;
+            if (playerWhoHasCard) {
+                console.log('[updateUI] Card', card, '- Player', playerWhoHasCard, 'has it');
+            }
+            // Also remove from myCards if it's there (sync with card status)
+            if (game.myCards.includes(card)) {
+                const index = game.myCards.indexOf(card);
+                if (index > -1) {
+                    console.log('[updateUI] Removing', card, 'from myCards (syncing with card status)');
+                    game.myCards.splice(index, 1);
+                }
+            }
+        } else {
+            // Fall back to game.myCards if card status is unknown
+            hasCard = game.myCards.includes(card);
+            console.log('[updateUI] Card', card, '- Status unknown, using myCards:', hasCard);
+        }
+
+        if (hasCard) {
+            cardDiv.classList.add('has');
+        } else {
+            cardDiv.classList.add('doesnt-have');
+            
+            // If another player has this card, apply their tick color
+            if (playerWhoHasCard) {
+                const playerTickColor = getPlayerTickColor(playerWhoHasCard);
+                if (playerTickColor) {
+                    cardDiv.style.setProperty('background', playerTickColor, 'important');
+                    cardDiv.style.setProperty('color', getContrastColor(playerTickColor), 'important');
+                    cardDiv.style.setProperty('border-color', playerTickColor, 'important');
+                }
+            }
+        }
+
+        cardDiv.addEventListener('click', () => {
+            console.log('[myCards] Card clicked:', card, 'Currently in myCards:', game.myCards.includes(card));
+            if (game.myCards.includes(card)) {
+                console.log('[myCards] Removing card:', card);
+                game.removeMyCard(card);
+            } else {
+                console.log('[myCards] Adding card:', card);
+                game.addMyCard(card);
+            }
+            console.log('[myCards] Updated myCards:', game.myCards);
+            updateUI();
+        });
+
+        myCardsDiv.appendChild(cardDiv);
+    });
+
+    // Update Card Status table
+    const cardStatusDiv = document.getElementById('cardStatus');
+    cardStatusDiv.innerHTML = '';
+
+    const statuses = game.getAllCardStatuses();
+    const allPlayersList = ['You', ...game.players];
+
+    // Render the grid layout
+    renderCardStatusGrid(cardStatusDiv, statuses, allPlayersList);
+}
+
+// Also add this helper function if it's missing
+function loadUtilityButtonSettings() {
 }
 
 // Helper function to create click handler for player status cells
@@ -549,32 +698,43 @@ function renderCardStatusGrid(cardStatusDiv, statuses, allPlayersList) {
                 
                 // Add click handler to toggle status: Unknown -> Has -> Doesn't have -> Unknown
                 playerCell.addEventListener('click', () => {
+                    console.log('[cardStatus] Cell clicked - Player:', player, 'Card:', name, 'Current status - has:', hasCard, 'doesntHave:', doesntHaveCard);
                     if (player === 'You') {
                         // Special handling for "You"
                         if (hasCard) {
                             // Has -> Doesn't have
-                            game.removeMyCard(name);
+                            console.log('[cardStatus] You: Has -> Doesn\'t have');
+                            // Mark as doesn't have FIRST (while "You" is still in "has" list for tracking)
+                            // This allows markCardDoesntHave to detect wasMarkedAsHas and clear auto-set players
                             game.markCardDoesntHave('You', name, true);
+                            // Then remove from myCards (this clears "You" status but tracking is already done)
+                            game.removeMyCard(name);
                         } else if (doesntHaveCard) {
                             // Doesn't have -> Unknown (clear status)
+                            console.log('[cardStatus] You: Doesn\'t have -> Unknown');
                             game.clearCardStatus('You', name, true);
                         } else {
                             // Unknown -> Has
+                            console.log('[cardStatus] You: Unknown -> Has');
                             game.addMyCard(name);
                         }
                     } else {
                         // For other players
                         if (hasCard) {
                             // Has -> Doesn't have
+                            console.log('[cardStatus]', player, ': Has -> Doesn\'t have');
                             game.markCardDoesntHave(player, name, true);
                         } else if (doesntHaveCard) {
                             // Doesn't have -> Unknown (clear status)
+                            console.log('[cardStatus]', player, ': Doesn\'t have -> Unknown');
                             game.clearCardStatus(player, name, true);
                         } else {
                             // Unknown -> Has
+                            console.log('[cardStatus]', player, ': Unknown -> Has');
                             game.markCardHas(player, name, true);
                         }
                     }
+                    console.log('[cardStatus] Calling updateUI after status change');
                     updateUI();
                 });
                 
@@ -595,13 +755,101 @@ function renderCardStatusGrid(cardStatusDiv, statuses, allPlayersList) {
             }
             
             envelopeCell.addEventListener('click', () => {
+                console.log('[envelopeCell] Clicked for card:', name, 'Current envelope status:', status.envelope);
                 if (status.envelope) {
+                    // Unmarking envelope - restore previous state
+                    console.log('[envelopeCell] Unmarking envelope, restoring previous state');
                     game.cardStatus[name].envelope = false;
+                    
+                    // Restore previous state if it was saved
+                    if (game.cardStatus[name].previousState) {
+                        const prevState = game.cardStatus[name].previousState;
+                        
+                        // Restore "has" list - if someone else had it, they get it back
+                        game.cardStatus[name].has = [...prevState.has];
+                        
+                        // Restore "doesntHave" list - but remove anyone who is in "has"
+                        game.cardStatus[name].doesntHave = [...prevState.doesntHave];
+                        prevState.has.forEach(player => {
+                            const index = game.cardStatus[name].doesntHave.indexOf(player);
+                            if (index > -1) {
+                                game.cardStatus[name].doesntHave.splice(index, 1);
+                            }
+                        });
+                        
+                        // Restore "hasOneOf" status
+                        game.cardStatus[name].hasOneOf = prevState.hasOneOf ? JSON.parse(JSON.stringify(prevState.hasOneOf)) : [];
+                        
+                        // Restore myCards if "You" was in the previous "has" list
+                        if (prevState.has.includes('You')) {
+                            if (!game.myCards.includes(name)) {
+                                game.myCards.push(name);
+                                console.log('[envelopeCell] Restored', name, 'to myCards');
+                            }
+                        } else {
+                            // If "You" didn't have it before, make sure it's not in myCards
+                            const myCardsIndex = game.myCards.indexOf(name);
+                            if (myCardsIndex > -1) {
+                                game.myCards.splice(myCardsIndex, 1);
+                                console.log('[envelopeCell] Removed', name, 'from myCards (You didn\'t have it before)');
+                            }
+                        }
+                        
+                        // Simply restore the previous state - if someone had the card, they get it back
+                        // Other players go back to their previous state (unknown if they weren't explicitly marked)
+                        // Don't automatically mark others as "doesn't have" - just restore what was there before
+                        
+                        delete game.cardStatus[name].previousState;
+                        console.log('[envelopeCell] Restored previous state:', prevState);
+                    } else {
+                        // If no previous state, clear everything
+                        game.cardStatus[name].has = [];
+                        game.cardStatus[name].doesntHave = [];
+                        game.cardStatus[name].hasOneOf = [];
+                    }
                 } else {
+                    // Marking as envelope - save current state and mark everyone as doesn't have
+                    console.log('[envelopeCell] Marking as envelope, saving current state');
+                    
+                    // Save current state before marking as envelope
+                    game.cardStatus[name].previousState = {
+                        has: [...status.has],
+                        doesntHave: [...status.doesntHave],
+                        hasOneOf: status.hasOneOf ? JSON.parse(JSON.stringify(status.hasOneOf)) : []
+                    };
+                    console.log('[envelopeCell] Saved previous state:', game.cardStatus[name].previousState);
+                    
+                    // Mark as envelope and mark everyone as doesn't have
+                    // This includes players who currently have it - they can't have it if it's in envelope
                     game.cardStatus[name].envelope = true;
                     game.cardStatus[name].has = [];
+                    const allPlayers = ['You', ...game.players];
+                    // Mark everyone as doesn't have (overwrites any "has" status)
+                    game.cardStatus[name].doesntHave = [...allPlayers];
+                    game.cardStatus[name].hasOneOf = [];
+                    
+                    // Also remove from myCards if "You" had it
+                    if (status.has.includes('You') && game.myCards.includes(name)) {
+                        const index = game.myCards.indexOf(name);
+                        if (index > -1) {
+                            game.myCards.splice(index, 1);
+                            console.log('[envelopeCell] Removed', name, 'from myCards');
+                        }
+                    }
+                    
+                    console.log('[envelopeCell] Marked everyone as doesn\'t have:', allPlayers);
                 }
-                game.updateDeductions();
+                
+                // Only call updateDeductions if we're marking as envelope (not restoring)
+                // When restoring, we want to restore the exact previous state without triggering deductions
+                const wasEnvelope = status.envelope;
+                if (!wasEnvelope) {
+                    // We're marking as envelope, so update deductions
+                    game.updateDeductions();
+                }
+                // If we're restoring (wasEnvelope was true), skip updateDeductions to preserve restored state
+                // This prevents automatic deductions from changing the restored state
+                
                 updateUI();
             });
             
@@ -781,8 +1029,36 @@ function renderCardStatusGrid(cardStatusDiv, statuses, allPlayersList) {
     }
 }
 
+// Show toast notification
+function showToast(message, icon = '💾', duration = 2000) {
+    const toast = document.getElementById('toastNotification');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    toastIcon.textContent = icon;
+    toastMessage.textContent = message;
+    
+    // Remove fade-out class if it exists
+    toast.classList.remove('fade-out');
+    
+    // Show toast
+    toast.style.display = 'flex';
+    
+    // Start fade out slightly before hiding
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+    }, duration - 300); // Start fade 300ms before hiding
+    
+    // Hide after duration
+    setTimeout(() => {
+        toast.style.display = 'none';
+        toast.classList.remove('fade-out');
+    }, duration);
+}
+
 // Save game state to localStorage
 function saveGameState() {
+    console.log('[saveGameState] Saving game state');
     const gameState = {
         players: game.players,
         myCards: game.myCards,
@@ -794,20 +1070,38 @@ function saveGameState() {
         isGameSetup: isGameSetup,
         youDisplayName: youDisplayName
     };
+    console.log('[saveGameState] Game state data:', {
+        players: gameState.players.length,
+        myCards: gameState.myCards.length,
+        suggestions: gameState.suggestions.length,
+        moves: gameState.moves.length,
+        moveNumber: gameState.moveNumber
+    });
     localStorage.setItem('clueGameState', JSON.stringify(gameState));
-    alert('Game state saved!');
+    console.log('[saveGameState] Game state saved to localStorage');
+    showToast('Game state saved!', '💾');
 }
 
 // Load game state from localStorage
 function loadGameState() {
+    console.log('[loadGameState] Loading game state');
     const savedState = localStorage.getItem('clueGameState');
     if (!savedState) {
-        alert('No saved game found.');
+        console.log('[loadGameState] No saved game found');
+        showToast('No saved game found.', '📂');
         return;
     }
     
     try {
         const gameState = JSON.parse(savedState);
+        console.log('[loadGameState] Parsed game state:', {
+            players: gameState.players?.length || 0,
+            myCards: gameState.myCards?.length || 0,
+            suggestions: gameState.suggestions?.length || 0,
+            moves: gameState.moves?.length || 0,
+            moveNumber: gameState.moveNumber || 0,
+            isGameSetup: gameState.isGameSetup || false
+        });
         game.players = gameState.players || [];
         game.myCards = gameState.myCards || [];
         game.cardStatus = gameState.cardStatus || {};
@@ -816,15 +1110,18 @@ function loadGameState() {
         game.moveNumber = gameState.moveNumber || 0;
         isGameSetup = gameState.isGameSetup || false;
         youDisplayName = gameState.youDisplayName || 'You';
+        console.log('[loadGameState] Game state loaded, isGameSetup:', isGameSetup);
         
         if (isGameSetup) {
             document.getElementById('mainContent').style.display = 'grid';
         }
         
         updateUI();
-        alert('Game state loaded!');
+        console.log('[loadGameState] UI updated');
+        showToast('Game state loaded!', '📂');
     } catch (error) {
-        alert('Error loading game state: ' + error.message);
+        console.error('[loadGameState] Error loading game state:', error);
+        showToast('Error loading game state: ' + error.message, '⚠️', 3500);
     }
 }
 
@@ -943,21 +1240,40 @@ function addUtilityButtons() {
     gameSetup.appendChild(utilityDiv);
 }
 
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then((registration) => {
+                console.log('[Service Worker] Registered successfully:', registration.scope);
+            })
+            .catch((error) => {
+                console.log('[Service Worker] Registration failed:', error);
+            });
+    });
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('[DOMContentLoaded] Initializing application');
     initializeDropdowns();
+    console.log('[DOMContentLoaded] Dropdowns initialized');
     addUtilityButtons();
+    console.log('[DOMContentLoaded] Utility buttons added');
     
     // Load utility button settings after buttons are created
     setTimeout(() => {
         loadUtilityButtonSettings();
+        console.log('[DOMContentLoaded] Utility button settings loaded');
     }, 100);
     
     // Automatically load saved game on startup if available
     const savedState = localStorage.getItem('clueGameState');
+    console.log('[DOMContentLoaded] Checking for saved game state:', savedState ? 'Found' : 'Not found');
     if (savedState) {
         try {
             const gameState = JSON.parse(savedState);
+            console.log('[DOMContentLoaded] Parsed game state:', gameState);
             game.players = gameState.players || [];
             game.myCards = gameState.myCards || [];
             game.cardStatus = gameState.cardStatus || {};
@@ -966,27 +1282,45 @@ document.addEventListener('DOMContentLoaded', () => {
             game.moveNumber = gameState.moveNumber || 0;
             game.numPlayers = gameState.numPlayers || 0;
             isGameSetup = gameState.isGameSetup || false;
+            console.log('[DOMContentLoaded] Game state loaded, isGameSetup:', isGameSetup, 'players:', game.players.length, 'myCards:', game.myCards.length);
             
             if (isGameSetup) {
                 document.getElementById('mainContent').style.display = 'grid';
                 updateUI();
             }
         } catch (error) {
-            console.error('Error loading saved game:', error);
+            console.error('[DOMContentLoaded] Error loading saved game:', error);
             // If there's an error, just continue with a fresh game
         }
     }
     
     // Load saved theme color
     loadThemeColor();
+    console.log('[DOMContentLoaded] Theme color loaded');
     
     // Load utility button colors after buttons are created
     setTimeout(() => {
         loadUtilityButtonColors();
+        console.log('[DOMContentLoaded] Utility button colors loaded');
     }, 100);
     
     // Initialize settings modal
     initializeSettingsModal();
+    console.log('[DOMContentLoaded] Settings modal initialized');
+    
+    // ——— Mobile Landscape Auto-Detect ———
+    function updateOrientationClass() {
+        if (window.matchMedia("(orientation: landscape)").matches) {
+            document.body.classList.remove('portrait-lock');
+        } else {
+            document.body.classList.add('portrait-lock');
+        }
+    }
+
+    // Run on load & rotate
+    window.addEventListener('orientationchange', updateOrientationClass);
+    window.addEventListener('resize', updateOrientationClass);
+    updateOrientationClass(); // initial check
 });
 
 // Settings Modal Functionality
@@ -1051,8 +1385,14 @@ function getContrastColor(hexColor) {
     // Calculate relative luminance
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     
-    // Return black for light colors, white for dark colors
-    return luminance > 0.5 ? '#000000' : '#ffffff';
+    // Return white for dark colors, black for light colors, grey for mid-tones
+    if (luminance < 0.4) {
+        return '#ffffff'; // White for dark backgrounds
+    } else if (luminance > 0.6) {
+        return '#000000'; // Black for light backgrounds
+    } else {
+        return '#333333'; // Dark grey for mid-tone backgrounds
+    }
 }
 
 // Helper function to get display name for a player (returns custom name for "You")
@@ -1304,13 +1644,14 @@ function applyPlayerColor(player, color) {
         header.style.color = getContrastColor(color);
     });
     
-    // If "You", also apply to "Your Cards" section
+    // If "You", also apply to "Your Cards" section - use suggestions section background
     if (player === 'You') {
         const myCardsDiv = document.getElementById('myCards');
         if (myCardsDiv && myCardsDiv.parentElement) {
             const cardSection = myCardsDiv.parentElement;
             if (cardSection.classList.contains('card-section')) {
-                cardSection.style.backgroundColor = color;
+                // Match the suggestions section background instead of player color
+                cardSection.style.backgroundColor = '#f8f9fa';
             }
         }
     }
@@ -1321,6 +1662,9 @@ function applyThemeColor(color) {
     // Calculate a darker shade for hover states
     const darkerColor = shadeColor(color, -20);
     document.documentElement.style.setProperty('--primary-color-dark', darkerColor);
+    // Set automatic text contrast color
+    const textColor = getContrastColor(color);
+    document.documentElement.style.setProperty('--primary-text-color', textColor);
 }
 
 function shadeColor(color, percent) {
@@ -1555,4 +1899,3 @@ function initializeSettingsModal() {
         }
     });
 }
-
